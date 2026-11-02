@@ -58,7 +58,7 @@ def clearsky(lat: float, lon: float, tz_hours: float, city: str = "") -> Weather
     import pvlib
 
     idx = _index(tz_hours)
-    cs = pvlib.location.Location(lat, lon, idx.tz).get_clearsky(idx, model="ineichen")
+    cs = pvlib.location.Location(lat, lon).get_clearsky(idx, model="ineichen")  # idx 已含時區
     z = np.zeros(8760)
     return Weather(idx, cs["dni"].values, cs["dhi"].values, cs["ghi"].values,
                    z, z, z, lat, lon, tz_hours, city or f"{lat:.2f},{lon:.2f}", "clearsky")
