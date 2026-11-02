@@ -1,0 +1,14 @@
+streamlit>=1.40
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+trimesh>=4.0
+embreex>=2.17      # 射線加速（沒有也能跑，但慢很多）
+rtree>=1.0
+shapely>=2.0
+mapbox-earcut>=1.0
+pvlib>=0.10
+ladybug-core>=0.42
+ifcopenshell>=0.8  # 讀 IFC；只用 OBJ/STL 可不裝
+plotly>=5.20
+matplotlib>=3.7
