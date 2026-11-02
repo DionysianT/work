@@ -1,0 +1,1173 @@
+<title>外殼日射與風場模擬</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：左側輸入欄（模型、氣象、周邊量體）＋右側分頁工作區；手機寬度改成上下堆疊 */
+:root{
+  --bg:#eef1f0; --panel:#ffffff; --ink:#1b2422; --muted:#5b6966; --line:#d3dad8;
+  --accent:#1f6f8b; --accent-ink:#ffffff; --soft:#e3ecee; --warn:#9a5b00; --warn-bg:#fff4e0; --bad:#a3271b;
+  --f-body:"IBM Plex Sans","Noto Sans TC",system-ui,sans-serif;
+  --f-data:"IBM Plex Mono","Noto Sans TC",ui-monospace,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121816; --panel:#1a2220; --ink:#e4ebe9; --muted:#93a29e; --line:#2f3a37;
+  --accent:#5fb3cf; --accent-ink:#0d1517; --soft:#20302f; --warn:#f0b35a; --warn-bg:#2d2414; --bad:#ff8a7a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121816; --panel:#1a2220; --ink:#e4ebe9; --muted:#93a29e; --line:#2f3a37;
+  --accent:#5fb3cf; --accent-ink:#0d1517; --soft:#20302f; --warn:#f0b35a; --warn-bg:#2d2414; --bad:#ff8a7a; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.app{display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;max-width:1500px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px}
+@media (max-width:900px){.app{grid-template-columns:minmax(0,1fr)}}
+header.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 18px}
+header.top h1{font-size:22px;margin:0;font-weight:700;text-wrap:balance}
+header.top .meta{color:var(--muted);font-size:13px;min-width:0}
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.box h2{font-size:13px;margin:0;letter-spacing:.04em;color:var(--muted);font-weight:600}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;min-width:0}
+label.row{flex-direction:row;align-items:center;gap:8px}
+.hint{color:var(--muted);font-size:12px}
+input[type=number],input[type=text],select{font:inherit;font-family:var(--f-data);font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.drop{border:1.5px dashed var(--line);border-radius:var(--r);padding:12px;text-align:center;cursor:pointer;color:var(--muted);font-size:13px}
+.drop:hover,.drop.over{border-color:var(--accent);color:var(--ink)}
+.drop strong{color:var(--ink);font-weight:500;word-break:break-all}
+.drop input{display:none}
+button{font:inherit;font-size:13px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{min-width:0;display:flex;flex-direction:column;gap:14px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 14px;color:var(--muted);white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 16px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.prog{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:4px}
+.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.prog span{font-size:12px;color:var(--muted);font-family:var(--f-data)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{border-left:2px solid var(--line);padding:2px 10px}
+.stat b{display:block;font-family:var(--f-data);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.viewer{position:relative;width:100%;height:560px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+@media (max-width:600px){.viewer{height:380px}}
+.viewer canvas{display:block}
+.vtools{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:2}
+.vtools button{padding:3px 8px;font-size:12px;background:var(--panel)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-family:var(--f-data);font-size:12px;padding:2px 6px;border-radius:3px;z-index:3}
+.legend{position:absolute;right:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:11px;font-family:var(--f-data);z-index:2;width:min(240px,60%)}
+.legend .ramp{height:10px;border-radius:2px;margin:4px 0 2px}
+.legend .ends{display:flex;justify-content:space-between;color:var(--muted)}
+.compass{position:absolute;right:12px;top:10px;width:44px;height:44px;z-index:2}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:1100px){.two{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card h3{margin:0;font-size:14px;font-weight:600}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:500}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--f-data)}
+td.txt{font-family:var(--f-body)}
+tr.pick{cursor:pointer}
+tr.pick:hover td{background:var(--soft)}
+.notice{background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:8px 10px;font-size:13px}
+.err{color:var(--bad);font-size:13px}
+.ctx-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr)) 26px;gap:4px;align-items:center}
+.ctx-row input{padding:4px;font-size:12px}
+.ctx-row button{padding:2px 0}
+.ctx-head{font-size:11px;color:var(--muted);font-family:var(--f-data)}
+canvas.plan{width:100%;display:block;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+.rose svg{width:100%;max-width:420px;height:auto;display:block;margin:0 auto}
+.doc{max-width:72ch;display:flex;flex-direction:column;gap:10px}
+.doc h3{margin:10px 0 0;font-size:15px}
+.doc p,.doc li{margin:0}
+.doc ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+kbd,code{font-family:var(--f-data);font-size:12.5px;background:var(--soft);padding:0 4px;border-radius:3px}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>外殼日射 ＋ 都市風場模擬</h1>
+    <div class="meta" id="meta">載入中…</div>
+  </header>
+
+  <aside>
+    <section class="box">
+      <h2>氣象檔</h2>
+      <label class="drop" id="epwDrop" for="epwFile">
+        <input type="file" id="epwFile" accept=".epw">
+        <span id="epwLabel">拖曳或點選 <strong>.epw</strong></span>
+      </label>
+      <div id="noEpw" class="grid3">
+        <label>緯度<input type="number" id="lat" value="25.035" step="0.001"></label>
+        <label>經度<input type="number" id="lon" value="121.507" step="0.001"></label>
+        <label>時區<input type="number" id="tz" value="8" step="0.5"></label>
+      </div>
+      <div class="hint" id="epwHint">未上傳 EPW：日射用晴空模型（偏高，只能看相對分布），風速需手動輸入。</div>
+    </section>
+
+    <section class="box">
+      <h2>量體模型</h2>
+      <label class="drop" id="mdlDrop" for="mdlFile">
+        <input type="file" id="mdlFile" accept=".ifc,.obj,.stl,.glb,.ply">
+        <span id="mdlLabel">拖曳或點選 <strong>IFC / OBJ / STL / GLB / PLY</strong><br>目前使用示範量體</span>
+      </label>
+      <label>模型「朝上」(+Y) 指向的方位角
+        <input type="number" id="upAz" value="45" step="5" min="0" max="359.9">
+        <span class="hint">北=0、東=90。平面朝上是東北 → 45</span>
+      </label>
+      <div class="grid2">
+        <label>單位<select id="unit"><option value="1">m</option><option value="0.01">cm</option><option value="0.001">mm</option><option value="0.3048">ft</option></select></label>
+        <label class="row" style="margin-top:20px"><input type="checkbox" id="yup">Y 軸朝上</label>
+      </div>
+      <label class="row"><input type="checkbox" id="drop">底部貼齊地面 z=0</label>
+      <div class="err" id="mdlErr" hidden></div>
+    </section>
+
+    <section class="box">
+      <h2>周邊量體（方塊）</h2>
+      <div class="hint">世界座標 X=東、Y=北（m），模型中心 (0,0)；rot 為逆時針角度。</div>
+      <div class="ctx-row ctx-head"><span>cx</span><span>cy</span><span>寬</span><span>深</span><span>高</span><span>rot</span><span></span></div>
+      <div id="ctxRows" style="display:flex;flex-direction:column;gap:4px"></div>
+      <div class="actions"><button id="ctxAdd">＋ 加一個方塊</button><button id="ctxApply" class="primary">套用</button></div>
+    </section>
+  </aside>
+
+  <main>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="site" aria-selected="true">模型與氣象</button>
+      <button class="tab" role="tab" data-tab="rad" aria-selected="false">外殼日射</button>
+      <button class="tab" role="tab" data-tab="wind" aria-selected="false">都市風場</button>
+      <button class="tab" role="tab" data-tab="doc" aria-selected="false">方法與限制</button>
+    </div>
+
+    <!-- 模型與氣象 -->
+    <section class="panel" id="tab-site">
+      <div class="two">
+        <div class="card"><h3>平面（上 = 北）</h3><canvas class="plan" id="fpCanvas" height="420"></canvas>
+          <div class="hint" id="fpInfo"></div></div>
+        <div class="card"><h3>風花圖</h3>
+          <label>期間<select id="roseSeason"></select></label>
+          <div class="rose" id="rose"><div class="hint">上傳 EPW 後顯示風花、盛行風向與逐月統計。</div></div></div>
+      </div>
+      <div class="card" id="scenCard" hidden><h3>EPW 建議的風向情境 <span class="hint">（點一列直接帶入風場）</span></h3><div class="tablewrap" id="scenTable"></div></div>
+      <div class="card" id="monCard" hidden><h3>逐月統計</h3><div class="tablewrap" id="monTable"></div></div>
+    </section>
+
+    <!-- 日射 -->
+    <section class="panel" id="tab-rad" hidden>
+      <div class="card">
+        <div class="controls">
+          <label>期間<select id="radPeriod"></select></label>
+          <label>每日時段 <span class="hint" id="radHrsTxt">0–24 時</span>
+            <div class="grid2"><input type="number" id="radH0" value="0" min="0" max="23"><input type="number" id="radH1" value="24" min="1" max="24"></div></label>
+          <label>地面反射率 albedo <span class="hint" id="albTxt">0.20</span><input type="range" id="albedo" min="0" max="0.6" step="0.05" value="0.2"></label>
+          <label>外殼網格 (m) <span class="hint" id="bgTxt">1.5</span><input type="range" id="bgrid" min="0.5" max="5" step="0.25" value="1.5"></label>
+          <label>地面網格 (m) <span class="hint" id="ggTxt">2.0</span><input type="range" id="ggrid" min="0.5" max="5" step="0.25" value="2"></label>
+          <label>地面範圍：外擴 (m) <span class="hint" id="gmTxt">30</span><input type="range" id="gmargin" min="0" max="150" step="5" value="30"></label>
+          <label>天空分區<select id="skymf"><option value="1">Tregenza 145</option><option value="2">Reinhart 577</option></select></label>
+        </div>
+        <div class="actions">
+          <button class="primary" id="radRun">執行日射模擬</button>
+          <button id="radStop" hidden>停止</button>
+          <div class="prog" id="radProg" hidden><div class="bar"><i></i></div><span></span></div>
+        </div>
+        <div class="notice" id="radNote" hidden></div>
+      </div>
+      <div id="radOut" hidden style="display:flex;flex-direction:column;gap:14px">
+        <div class="stats" id="radStats"></div>
+        <div class="viewer" id="radView">
+          <div class="vtools" id="radCams"></div>
+          <div class="legend" id="radLegend"></div>
+        </div>
+        <div class="actions">
+          <label class="row">色階上限 <input type="number" id="radVmax" value="1500" step="50" style="width:110px"> kWh/m²</label>
+          <button id="radPng" data-dl>下載 3D 畫面 PNG</button>
+          <button id="radCsv" data-dl>下載朝向統計 CSV</button>
+        </div>
+        <div class="card"><h3>依朝向統計（面積加權平均，kWh/m²）</h3><div class="tablewrap" id="radTable"></div>
+          <div class="hint">自我檢查：無遮蔽屋頂應接近水平面 GHI。</div></div>
+      </div>
+    </section>
+
+    <!-- 風場 -->
+    <section class="panel" id="tab-wind" hidden>
+      <div class="card">
+        <div class="controls">
+          <label>風的來向（度，北=0、東=90）<input type="number" id="wd" value="90" step="22.5"></label>
+          <label>參考風速 U10（m/s，10 m 高）<input type="number" id="u10" value="3" step="0.1" min="0.3"></label>
+          <label>地況（指數律 α）<select id="alpha"><option value="0.14">開闊 0.14</option><option value="0.25" selected>郊區 0.25</option><option value="0.33">市區 0.33</option></select></label>
+          <label>網格 dx (m)<select id="dx"><option>2</option><option>2.5</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></label>
+          <label>地面邊界<select id="ground"><option value="free">free-slip（無摩擦）</option><option value="noslip">no-slip（有摩擦）</option></select></label>
+          <label>上游距離 (m)<input type="number" id="ups" step="10"></label>
+          <label>下游距離 (m)<input type="number" id="dns" step="10"></label>
+          <label>兩側距離 (m)<input type="number" id="lats" step="10"></label>
+          <label>計算域高度 (m)<input type="number" id="hgt" step="5"></label>
+          <label>時間步數（0 = 自動）<input type="number" id="steps" value="0" step="200" min="0"></label>
+          <label>Smagorinsky Cs <span class="hint" id="csTxt">0.17</span><input type="range" id="cs" min="0.1" max="0.3" step="0.01" value="0.17"></label>
+          <label>lattice 速度 <span class="hint" id="ulTxt">0.055</span><input type="range" id="ulat" min="0.03" max="0.1" step="0.005" value="0.055"></label>
+        </div>
+        <div class="hint" id="windEst"></div>
+        <div class="actions">
+          <button class="primary" id="windRun">執行風場模擬</button>
+          <button id="windStop" hidden>停止</button>
+          <div class="prog" id="windProg" hidden><div class="bar"><i></i></div><span></span></div>
+        </div>
+        <div class="err" id="windErr" hidden></div>
+      </div>
+      <div id="windOut" hidden style="display:flex;flex-direction:column;gap:14px">
+        <div class="controls">
+          <label>檢視結果<select id="windSel"></select></label>
+          <label>切面高度 <span class="hint" id="zTxt"></span><input type="range" id="zk" min="1" max="10" step="1" value="1"></label>
+          <label>顯示<select id="wmode"><option value="speed">風速 m/s</option><option value="ratio">風速比（÷ 同高度自由流）</option></select></label>
+          <label>色階上限<input type="number" id="wvmax" step="0.1"></label>
+        </div>
+        <div class="stats" id="windStats"></div>
+        <div class="card"><h3 id="windTitle"></h3>
+          <div style="position:relative"><canvas class="plan" id="windCanvas" height="600"></canvas><div class="tip" id="windTip" hidden></div></div>
+        </div>
+        <div class="viewer" id="windView"><div class="vtools" id="windCams"></div><div class="legend" id="windLegend"></div></div>
+        <div class="actions">
+          <button id="windPng" data-dl>下載平面 PNG</button>
+          <button id="wind3dPng" data-dl>下載鳥瞰 PNG</button>
+          <button id="windCsv" data-dl>下載切面數值 CSV</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 說明 -->
+    <section class="panel" id="tab-doc" hidden>
+      <div class="card doc">
+        <h3>這個頁面怎麼算</h3>
+        <p>所有計算都在你的瀏覽器裡執行，上傳的 EPW 和模型不會送到任何伺服器。關掉分頁後結果就消失，需要的圖表請先下載。</p>
+        <h3>外殼日射（kWh/m²，期間累積）</h3>
+        <ul>
+          <li>氣象：EPW 逐時直達（DNI）、擴散（DHI）、水平面全天空（GHI）日射；沒有 EPW 時用晴空模型，數值偏高，只能看相對分布。</li>
+          <li>直達：逐時太陽位置累積到天空分區後做射線遮蔽（和逐時追蹤的差異小於 1%）。</li>
+          <li>擴散：等向天空，Tregenza 145 或 Reinhart 577 分區射線遮蔽。Ladybug 用 Perez 模型，斜面與立面數值可能差幾成，分布趨勢不變。</li>
+          <li>地面反射：albedo × GHI × (1 − cosβ)/2，不考慮遮蔽。</li>
+        </ul>
+        <h3>都市風場（只適合比較方案）</h3>
+        <ul>
+          <li>D3Q19 Lattice Boltzmann ＋ Smagorinsky LES。入流為指數律 U(z) = U10·(z/10)^α，頂面給定自由流，出流零梯度，兩側週期邊界。</li>
+          <li>建物體素化後用反彈邊界。地面 free-slip 時近地風速接近自由流，縫隙加速可能高估；no-slip 在 3 m 網格下近地風速約只剩一半。</li>
+          <li>這不是 OpenFOAM 或 Eddy3D 的正式 CFD：網格粗、雷諾數不是實際值、沒有地表粗糙度模型。沒放周邊街廓時整體風速偏高，可以在左側加周邊方塊。</li>
+          <li>正式報告建議用 Eddy3D 加上周邊量體再驗證。</li>
+        </ul>
+        <h3>模型準備</h3>
+        <ul>
+          <li>每個量體要是封閉實體。IFC 會逐構件判斷內外，構件互相重疊沒關係；OBJ / GLB 以每個物件為單位判斷。</li>
+          <li>OBJ、GLB 多半是 Y 軸朝上，載入時會自動勾選；STL、PLY 通常是 Z 軸朝上。</li>
+          <li>先在「模型與氣象」確認平面方位正確，再跑模擬。</li>
+        </ul>
+        <h3>計算時間</h3>
+        <p>風場的時間大致和「格數 × 步數」成正比，參數區下方會即時估算。先用 4–5 m 網格看趨勢，定案再用 3 m。</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<!-- ============ 計算核心（在 Web Worker 執行） ============ -->
+<script id="workerSrc" type="text/plain">
+"use strict";
+// ---------- BVH（三角形射線加速） ----------
+function buildBVH(tri) { // tri: Float32Array 9*T
+  const T = tri.length / 9, idx = new Uint32Array(T), cen = new Float32Array(T * 3);
+  const bmin = new Float32Array(T * 3), bmax = new Float32Array(T * 3);
+  for (let t = 0; t < T; t++) {
+    idx[t] = t;
+    for (let a = 0; a < 3; a++) {
+      const v0 = tri[t*9+a], v1 = tri[t*9+3+a], v2 = tri[t*9+6+a];
+      bmin[t*3+a] = Math.min(v0, v1, v2); bmax[t*3+a] = Math.max(v0, v1, v2);
+      cen[t*3+a] = (v0 + v1 + v2) / 3;
+    }
+  }
+  const nodes = []; // [minx,miny,minz,maxx,maxy,maxz,left,right/count,start]
+  const nb = [], stack = [[0, T]];
+  function make(s, e) {
+    const n = { mn: [1e30,1e30,1e30], mx: [-1e30,-1e30,-1e30], s, e, l: -1, r: -1 };
+    const cmn = [1e30,1e30,1e30], cmx = [-1e30,-1e30,-1e30];
+    for (let i = s; i < e; i++) { const t = idx[i];
+      for (let a = 0; a < 3; a++) {
+        n.mn[a] = Math.min(n.mn[a], bmin[t*3+a]); n.mx[a] = Math.max(n.mx[a], bmax[t*3+a]);
+        cmn[a] = Math.min(cmn[a], cen[t*3+a]); cmx[a] = Math.max(cmx[a], cen[t*3+a]);
+      } }
+    const id = nodes.length; nodes.push(n);
+    if (e - s > 4) {
+      let ax = 0; for (let a = 1; a < 3; a++) if (cmx[a] - cmn[a] > cmx[ax] - cmn[ax]) ax = a;
+      const mid = (cmn[ax] + cmx[ax]) / 2;
+      let i = s, j = e - 1;
+      while (i <= j) { if (cen[idx[i]*3+ax] < mid) i++; else { const tmp = idx[i]; idx[i] = idx[j]; idx[j] = tmp; j--; } }
+      let m = i; if (m === s || m === e) m = (s + e) >> 1;
+      n.l = make(s, m); n.r = make(m, e);
+    }
+    return id;
+  }
+  make(0, T);
+  const N = nodes.length, box = new Float32Array(N * 6), info = new Int32Array(N * 4);
+  nodes.forEach((n, i) => { box.set(n.mn, i*6); box.set(n.mx, i*6+3); info[i*4] = n.l; info[i*4+1] = n.r; info[i*4+2] = n.s; info[i*4+3] = n.e; });
+  return { tri, idx, box, info };
+}
+const STK = new Int32Array(256);
+function hitTri(tri, t, ox, oy, oz, dx, dy, dz) {
+  const o = t * 9;
+  const e1x = tri[o+3]-tri[o], e1y = tri[o+4]-tri[o+1], e1z = tri[o+5]-tri[o+2];
+  const e2x = tri[o+6]-tri[o], e2y = tri[o+7]-tri[o+1], e2z = tri[o+8]-tri[o+2];
+  const px = dy*e2z - dz*e2y, py = dz*e2x - dx*e2z, pz = dx*e2y - dy*e2x;
+  const det = e1x*px + e1y*py + e1z*pz;
+  if (det > -1e-12 && det < 1e-12) return -1;
+  const inv = 1 / det, tx = ox-tri[o], ty = oy-tri[o+1], tz = oz-tri[o+2];
+  const u = (tx*px + ty*py + tz*pz) * inv; if (u < 0 || u > 1) return -1;
+  const qx = ty*e1z - tz*e1y, qy = tz*e1x - tx*e1z, qz = tx*e1y - ty*e1x;
+  const v = (dx*qx + dy*qy + dz*qz) * inv; if (v < 0 || u + v > 1) return -1;
+  const d = (e2x*qx + e2y*qy + e2z*qz) * inv;
+  return d > 1e-6 ? d : -1;
+}
+function slab(box, n, ox, oy, oz, ix, iy, iz) {
+  const b = n * 6;
+  let t1 = (box[b]-ox)*ix, t2 = (box[b+3]-ox)*ix, tmin = Math.min(t1,t2), tmax = Math.max(t1,t2);
+  t1 = (box[b+1]-oy)*iy; t2 = (box[b+4]-oy)*iy; tmin = Math.max(tmin, Math.min(t1,t2)); tmax = Math.min(tmax, Math.max(t1,t2));
+  t1 = (box[b+2]-oz)*iz; t2 = (box[b+5]-oz)*iz; tmin = Math.max(tmin, Math.min(t1,t2)); tmax = Math.min(tmax, Math.max(t1,t2));
+  return tmax >= Math.max(tmin, 0);
+}
+function anyHit(B, ox, oy, oz, dx, dy, dz) {
+  const ix = 1/dx, iy = 1/dy, iz = 1/dz, { box, info, idx, tri } = B;
+  let sp = 0; STK[sp++] = 0;
+  while (sp) {
+    const n = STK[--sp];
+    if (!slab(box, n, ox, oy, oz, ix, iy, iz)) continue;
+    if (info[n*4] < 0) { for (let i = info[n*4+2]; i < info[n*4+3]; i++) if (hitTri(tri, idx[i], ox, oy, oz, dx, dy, dz) > 0) return true; }
+    else { STK[sp++] = info[n*4]; STK[sp++] = info[n*4+1]; }
+  }
+  return false;
+}
+function allHits(B, ox, oy, oz, dx, dy, dz, out) { // out: [[t, triIndex], ...]
+  const ix = 1/dx, iy = 1/dy, iz = 1/dz, { box, info, idx, tri } = B;
+  let sp = 0; STK[sp++] = 0; out.length = 0;
+  while (sp) {
+    const n = STK[--sp];
+    if (!slab(box, n, ox, oy, oz, ix, iy, iz)) continue;
+    if (info[n*4] < 0) { for (let i = info[n*4+2]; i < info[n*4+3]; i++) { const d = hitTri(tri, idx[i], ox, oy, oz, dx, dy, dz); if (d > 0) out.push([d, idx[i]]); } }
+    else { STK[sp++] = info[n*4]; STK[sp++] = info[n*4+1]; }
+  }
+  return out;
+}
+// 垂直柱的實體區間（每個量體各自做奇偶判斷，再取聯集）
+function columnIntervals(B, part, x, y) {
+  const hits = allHits(B, x + 1.3e-4, y + 0.7e-4, -1e4, 0, 0, 1, []);
+  const byPart = new Map();
+  for (const [t, tr] of hits) { const p = part[tr]; if (!byPart.has(p)) byPart.set(p, []); byPart.get(p).push(t - 1e4); }
+  const iv = [];
+  for (const zs of byPart.values()) { zs.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < zs.length; i += 2) iv.push([zs[i], zs[i+1]]); }
+  return iv;
+}
+const inIv = (iv, z) => { for (const [a, b] of iv) if (z > a && z < b) return true; return false; };
+
+// ---------- 太陽位置（NOAA） ----------
+function sunpos(doy, hour, lat, lon, tz) {
+  const R = Math.PI/180, g = 2*Math.PI/365*(doy-1+(hour-12)/24);
+  const eq = 229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+  const d = 0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+  const ha = ((hour*60+eq+4*lon-60*tz)/4-180)*R, la = lat*R;
+  const alt = Math.asin(Math.max(-1, Math.min(1, Math.sin(la)*Math.sin(d)+Math.cos(la)*Math.cos(d)*Math.cos(ha))));
+  const az = Math.atan2(Math.sin(ha), Math.cos(ha)*Math.sin(la)-Math.tan(d)*Math.cos(la)) + Math.PI;
+  return [alt, az];
+}
+function skyPatches(mf) {
+  const T = [6, 18, 30, 42, 54, 66, 78], dirs = [], om = [], st = 12/mf*Math.PI/180;
+  for (let b = 0; b < 7; b++) for (let s = 0; s < mf; s++) {
+    const a0 = (b*12)*Math.PI/180 + s*st, a1 = a0 + st, ac = (a0+a1)/2, n = T[b]*mf;
+    const o = 2*Math.PI*(Math.sin(a1)-Math.sin(a0))/n;
+    for (let k = 0; k < n; k++) { const A = 2*Math.PI*k/n; dirs.push([Math.cos(ac)*Math.sin(A), Math.cos(ac)*Math.cos(A), Math.sin(ac)]); om.push(o); }
+  }
+  dirs.push([0, 0, 1]); om.push(2*Math.PI*(1-Math.sin(84*Math.PI/180)));
+  return { dirs, om };
+}
+
+// ---------- 日射 ----------
+function runRadiation(m) {
+  const { tri, part, nMain, w, p } = m;
+  const B = buildBVH(tri);
+  post({ type: "progress", f: 0.02, msg: "建立加速結構" });
+  // 天氣與太陽
+  const sky = skyPatches(p.mf), K = sky.dirs.length, sunE = new Float64Array(K);
+  let ghi = 0, dhi = 0, dni = 0, sunH = 0;
+  const md = [31,28,31,30,31,30,31,31,30,31,30,31];
+  let h = 0;
+  for (let mo = 0; mo < 12; mo++) for (let d = 0; d < md[mo]; d++) for (let hr = 0; hr < 24; hr++, h++) {
+    if (!p.months.includes(mo+1)) continue;
+    const inH = p.h0 <= p.h1 ? (hr >= p.h0 && hr < p.h1) : (hr >= p.h0 || hr < p.h1);
+    if (!inH) continue;
+    ghi += w.ghi[h]; dhi += w.dhi[h]; dni += w.dni[h];
+    if (w.dni[h] <= 0) continue;
+    const [alt, az] = sunpos(Math.floor(h/24)+1, hr + 0.5, w.lat, w.lon, w.tz);
+    if (alt <= 0) continue;
+    sunH++;
+    const s = [Math.cos(alt)*Math.sin(az), Math.cos(alt)*Math.cos(az), Math.sin(alt)];
+    let best = 0, bd = -2; for (let k = 0; k < K; k++) { const c = s[0]*sky.dirs[k][0]+s[1]*sky.dirs[k][1]+s[2]*sky.dirs[k][2]; if (c > bd) { bd = c; best = k; } }
+    sunE[best] += w.dni[h] / 1000;
+  }
+  ghi /= 1000; dhi /= 1000; dni /= 1000;
+  const L = dhi / Math.PI;
+  const sunDirs = [], sunVals = [];
+  for (let k = 0; k < K; k++) if (sunE[k] > 0) { sunDirs.push(sky.dirs[k]); sunVals.push(sunE[k]); }
+
+  // 外殼分析面：最長邊二分直到 ≤ 網格
+  const at = []; // 9 floats per tri
+  const g2 = p.bgrid * p.bgrid;
+  function split(a, b, c, depth) {
+    const ab = (a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2, bc = (b[0]-c[0])**2+(b[1]-c[1])**2+(b[2]-c[2])**2, ca = (c[0]-a[0])**2+(c[1]-a[1])**2+(c[2]-a[2])**2;
+    const mx = Math.max(ab, bc, ca);
+    if (mx <= g2 || depth > 24) { at.push(...a, ...b, ...c); return; }
+    if (mx === ab) { const mm = [(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2]; split(a, mm, c, depth+1); split(mm, b, c, depth+1); }
+    else if (mx === bc) { const mm = [(b[0]+c[0])/2,(b[1]+c[1])/2,(b[2]+c[2])/2]; split(a, b, mm, depth+1); split(a, mm, c, depth+1); }
+    else { const mm = [(c[0]+a[0])/2,(c[1]+a[1])/2,(c[2]+a[2])/2]; split(a, b, mm, depth+1); split(mm, b, c, depth+1); }
+  }
+  for (let t = 0; t < nMain; t++) {
+    const o = t*9, a = [tri[o],tri[o+1],tri[o+2]], b = [tri[o+3],tri[o+4],tri[o+5]], c = [tri[o+6],tri[o+7],tri[o+8]];
+    const nx = (b[1]-a[1])*(c[2]-a[2])-(b[2]-a[2])*(c[1]-a[1]), ny = (b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]), nz = (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    const ln = Math.hypot(nx, ny, nz); if (ln < 1e-9 || nz/ln < -0.9) continue;
+    split(a, b, c, 0);
+    if (at.length > 9 * 1.5e6) throw new Error("分析面超過 150 萬個，請加大外殼網格");
+  }
+  const NB = at.length / 9;
+  // 地面
+  let gx = [], gy = [], gpts = [];
+  if (p.gmargin > 0) {
+    let mn = [1e30,1e30], mx = [-1e30,-1e30];
+    for (let t = 0; t < nMain*9; t += 3) { mn[0] = Math.min(mn[0], tri[t]); mx[0] = Math.max(mx[0], tri[t]); mn[1] = Math.min(mn[1], tri[t+1]); mx[1] = Math.max(mx[1], tri[t+1]); }
+    for (let x = mn[0]-p.gmargin+p.ggrid/2; x < mx[0]+p.gmargin; x += p.ggrid) gx.push(x);
+    for (let y = mn[1]-p.gmargin+p.ggrid/2; y < mx[1]+p.gmargin; y += p.ggrid) gy.push(y);
+    for (let j = 0; j < gy.length; j++) for (let i = 0; i < gx.length; i++) {
+      const iv = columnIntervals(B, part, gx[i], gy[j]);
+      gpts.push(inIv(iv, 0.5) ? -1 : 1);
+    }
+  }
+  const NG = gpts.length;
+  const total = NB + NG;
+  const bval = new Float32Array(NB), bnrm = new Float32Array(NB*3), barea = new Float32Array(NB);
+  const gval = new Float32Array(NG).fill(NaN);
+  const t0 = Date.now();
+  function evalPt(px, py, pz, nx, ny, nz) {
+    let dir = 0, dif = 0;
+    for (let k = 0; k < sunDirs.length; k++) { const s = sunDirs[k], c = nx*s[0]+ny*s[1]+nz*s[2]; if (c > 0 && !anyHit(B, px, py, pz, s[0], s[1], s[2])) dir += c * sunVals[k]; }
+    for (let k = 0; k < K; k++) { const s = sky.dirs[k], c = nx*s[0]+ny*s[1]+nz*s[2]; if (c > 0 && !anyHit(B, px, py, pz, s[0], s[1], s[2])) dif += L * sky.om[k] * c; }
+    return dir + dif + ghi * p.albedo * (1 - nz) / 2;
+  }
+  for (let t = 0; t < NB; t++) {
+    const o = t*9;
+    const ux = at[o+3]-at[o], uy = at[o+4]-at[o+1], uz = at[o+5]-at[o+2], vx = at[o+6]-at[o], vy = at[o+7]-at[o+1], vz = at[o+8]-at[o+2];
+    let nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx; const ln = Math.hypot(nx, ny, nz) || 1;
+    barea[t] = ln / 2; nx /= ln; ny /= ln; nz /= ln;
+    bnrm[t*3] = nx; bnrm[t*3+1] = ny; bnrm[t*3+2] = nz;
+    const cx = (at[o]+at[o+3]+at[o+6])/3 + nx*0.05, cy = (at[o+1]+at[o+4]+at[o+7])/3 + ny*0.05, cz = (at[o+2]+at[o+5]+at[o+8])/3 + nz*0.05;
+    bval[t] = evalPt(cx, cy, cz, nx, ny, nz);
+    if ((t & 1023) === 0) post({ type: "progress", f: 0.05 + 0.95 * t / total, msg: `外殼 ${t.toLocaleString()}/${NB.toLocaleString()} 面，${((Date.now()-t0)/1000).toFixed(0)}s` });
+  }
+  for (let i = 0; i < NG; i++) {
+    if (gpts[i] < 0) continue;
+    const x = gx[i % gx.length], y = gy[Math.floor(i / gx.length)];
+    gval[i] = evalPt(x, y, 0.05, 0, 0, 1);
+    if ((i & 1023) === 0) post({ type: "progress", f: 0.05 + 0.95 * (NB + i) / total, msg: `地面 ${i.toLocaleString()}/${NG.toLocaleString()} 點` });
+  }
+  const atF = new Float32Array(at);
+  post({ type: "rad", res: { at: atF, bval, bnrm, barea, gx: new Float32Array(gx), gy: new Float32Array(gy), gval, ghi, dhi, dni, sunH, seconds: (Date.now()-t0)/1000 } },
+       [atF.buffer, bval.buffer, bnrm.buffer, barea.buffer, gval.buffer]);
+}
+
+// ---------- 風場：D3Q19 LBM + Smagorinsky ----------
+const CX = [0,1,-1,0,0,0,0,1,-1,1,-1,1,-1,1,-1,0,0,0,0], CY = [0,0,0,1,-1,0,0,1,-1,-1,1,0,0,0,0,1,-1,1,-1], CZ = [0,0,0,0,0,1,-1,0,0,0,0,1,-1,-1,1,1,-1,-1,1];
+const WQ = [1/3,1/18,1/18,1/18,1/18,1/18,1/18,1/36,1/36,1/36,1/36,1/36,1/36,1/36,1/36,1/36,1/36,1/36,1/36];
+const OPP = [0,2,1,4,3,6,5,8,7,10,9,12,11,14,13,16,15,18,17];
+const MIR = CX.map((_, i) => CX.findIndex((__, j) => CX[j] === CX[i] && CY[j] === CY[i] && CZ[j] === -CZ[i]));
+function runWind(m) {
+  const { tri, part, d, p } = m;
+  const { NX, NY, NZ, ex, ey, xs, ys, zs } = d, N = NX*NY*NZ, S = NY*NZ;
+  const B = buildBVH(tri);
+  const solid = new Uint8Array(N);
+  for (let i = 0; i < NX; i++) {
+    for (let j = 0; j < NY; j++) {
+      const wx = xs[i]*ex[0] + ys[j]*ey[0], wy = xs[i]*ex[1] + ys[j]*ey[1];
+      const iv = columnIntervals(B, part, wx, wy);
+      const b = i*S + j*NZ; solid[b] = 1;
+      if (iv.length) for (let k = 1; k < NZ; k++) if (inIv(iv, zs[k])) solid[b+k] = 1;
+    }
+    if (i % 10 === 0) post({ type: "progress", f: 0, msg: `體素化 ${i}/${NX}` });
+  }
+  const prof = new Float64Array(NZ);
+  for (let k = 1; k < NZ; k++) prof[k] = p.ulat * Math.pow(Math.max(zs[k], 0.5) / 10, p.alpha);
+  const feqK = new Float64Array(NZ*19);
+  for (let k = 0; k < NZ; k++) { const u = prof[k]; for (let q = 0; q < 19; q++) { const cu = CX[q]*u; feqK[k*19+q] = WQ[q]*(1+3*cu+4.5*cu*cu-1.5*u*u); } }
+  let f = new Float32Array(N*19), g = new Float32Array(N*19);
+  for (let n = 0; n < N; n++) { const k = n % NZ; const sol = solid[n] && k > 0; for (let q = 0; q < 19; q++) { const v = sol ? WQ[q] : feqK[k*19+q]; f[q*N+n] = v; g[q*N+n] = v; } }
+  const steps = p.steps > 0 ? p.steps : Math.max(1200, Math.round(1.5 * NX / p.ulat));
+  const navg = Math.max(1, Math.round(steps * p.avgf));
+  const usum = new Float32Array(N*3);
+  const tau0 = 0.505, cs2 = p.cs*p.cs, free = p.ground === "free";
+  const fl = new Float64Array(19), off = CX.map((_, q) => CX[q]*S + CY[q]*NZ + CZ[q]);
+  const t0 = Date.now();
+  for (let it = 0; it < steps; it++) {
+    if (stopFlag) throw new Error("已停止");
+    const avg = it >= steps - navg;
+    let umax = 0;
+    for (let i = 1; i < NX-1; i++) for (let j = 0; j < NY; j++) {
+      const jm = j === 0, jp = j === NY-1;
+      for (let k = 1; k < NZ-1; k++) {
+        const n = i*S + j*NZ + k; if (solid[n]) continue;
+        let rho = 0, ux = 0, uy = 0, uz = 0;
+        for (let q = 0; q < 19; q++) {
+          let s = n - off[q];
+          if (jm && CY[q] === 1) s += NY*NZ; else if (jp && CY[q] === -1) s -= NY*NZ;
+          let v;
+          if (solid[s]) {
+            if (free && k === 1 && CZ[q] === 1) { const s2 = s + 1; v = solid[s2] ? f[OPP[q]*N+n] : f[MIR[q]*N+s2]; }
+            else v = f[OPP[q]*N+n];
+          } else v = f[q*N+s];
+          fl[q] = v; rho += v; ux += v*CX[q]; uy += v*CY[q]; uz += v*CZ[q];
+        }
+        ux /= rho; uy /= rho; uz /= rho;
+        const usq = 1.5*(ux*ux+uy*uy+uz*uz);
+        let pxx = 0, pyy = 0, pzz = 0, pxy = 0, pxz = 0, pyz = 0;
+        for (let q = 0; q < 19; q++) {
+          const cu = CX[q]*ux + CY[q]*uy + CZ[q]*uz;
+          const fe = WQ[q]*rho*(1+3*cu+4.5*cu*cu-usq);
+          const ne = fl[q] - fe; fl[q] = fe; g[q*N+n] = ne; // 暫存 fneq
+          pxx += CX[q]*CX[q]*ne; pyy += CY[q]*CY[q]*ne; pzz += CZ[q]*CZ[q]*ne;
+          pxy += CX[q]*CY[q]*ne; pxz += CX[q]*CZ[q]*ne; pyz += CY[q]*CZ[q]*ne;
+        }
+        const Q = Math.sqrt(pxx*pxx+pyy*pyy+pzz*pzz+2*(pxy*pxy+pxz*pxz+pyz*pyz));
+        const tau = 0.5*(tau0 + Math.sqrt(tau0*tau0 + 18*Math.SQRT2*cs2*Q/rho));
+        const om = 1 - 1/tau;
+        for (let q = 0; q < 19; q++) g[q*N+n] = fl[q] + om*g[q*N+n];
+        if (avg) { usum[n*3] += ux; usum[n*3+1] += uy; usum[n*3+2] += uz; }
+        if (ux > umax) umax = ux;
+      }
+    }
+    // 出流零梯度
+    const a = (NX-1)*S, b = (NX-2)*S;
+    for (let q = 0; q < 19; q++) g.copyWithin(q*N+a, q*N+b, q*N+b+S);
+    const tmp = f; f = g; g = tmp;
+    if (it % 20 === 0 || it === steps-1) {
+      if (!(umax < 0.4)) throw new Error(`第 ${it} 步數值發散。請加大網格、降低 lattice 速度或提高 Cs。`);
+      const el = (Date.now()-t0)/1000, eta = el/(it+1)*(steps-it-1);
+      post({ type: "progress", f: (it+1)/steps, msg: `第 ${it+1}/${steps} 步，已 ${el.toFixed(0)}s，約剩 ${eta.toFixed(0)}s` });
+    }
+  }
+  const sc = p.u10 / p.ulat / navg;
+  for (let i = 0; i < usum.length; i++) usum[i] *= sc;
+  post({ type: "wind", res: { u: usum, solid, steps, seconds: (Date.now()-t0)/1000 } }, [usum.buffer, solid.buffer]);
+}
+let stopFlag = false;
+const post = (m, tr) => postMessage(m, tr || []);
+onmessage = (e) => {
+  const m = e.data; stopFlag = false;
+  try { if (m.type === "rad") runRadiation(m); else if (m.type === "wind") runWind(m); }
+  catch (err) { post({ type: "error", msg: err.message || String(err) }); }
+};
+</script>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 0) => (v == null || !isFinite(v)) ? "—" : Number(v).toLocaleString("zh-TW", { minimumFractionDigits: d, maximumFractionDigits: d });
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SECT = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const SECT_ZH = ["北","北北東","東北","東北東","東","東南東","東南","南南東","南","南南西","西南","西南西","西","西北西","西北","北北西"];
+const SEASONS = { "全年": [1,2,3,4,5,6,7,8,9,10,11,12], "夏季（6–8月）": [6,7,8], "冬季（12–2月）": [12,1,2], "春季（3–5月）": [3,4,5], "秋季（9–11月）": [9,10,11] };
+const MDAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
+const MONTH_OF = new Uint8Array(8760); { let h = 0; MDAYS.forEach((d, m) => { for (let i = 0; i < d*24; i++) MONTH_OF[h++] = m+1; }); }
+
+// ---------- 色階 ----------
+const RAD_STOPS = ["#4b6fb5","#6fa8dc","#a9c9e8","#f6f2c4","#f9d35a","#f39c34","#e2481e","#c4161c"].map(h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]);
+function radColor(x) { x = Math.max(0, Math.min(1, x)) * (RAD_STOPS.length-1); const i = Math.min(RAD_STOPS.length-2, Math.floor(x)), t = x-i, a = RAD_STOPS[i], b = RAD_STOPS[i+1]; return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+function turbo(x) { x = Math.max(0, Math.min(1, x));
+  const r = 0.13572138+x*(4.6153926+x*(-42.66032258+x*(132.13108234+x*(-152.94239396+x*59.28637943))));
+  const g = 0.09140261+x*(2.19418839+x*(4.84296658+x*(-14.18503333+x*(4.27729857+x*2.82956604))));
+  const b = 0.1066733+x*(12.64194608+x*(-60.58204836+x*(110.36276771+x*(-89.90310912+x*27.34824973))));
+  return [255*Math.max(0,Math.min(1,r)), 255*Math.max(0,Math.min(1,g)), 255*Math.max(0,Math.min(1,b))]; }
+function rampCss(fn) { const s = []; for (let i = 0; i <= 10; i++) { const c = fn(i/10); s.push(`rgb(${c.map(Math.round).join(",")}) ${i*10}%`); } return `linear-gradient(90deg,${s.join(",")})`; }
+function legend(el, fn, vmax, unit) { el.innerHTML = `<div>${unit}</div><div class="ramp" style="background:${rampCss(fn)}"></div><div class="ends"><span>0</span><span>${fmt(vmax/2, vmax < 10 ? 1 : 0)}</span><span>${fmt(vmax, vmax < 10 ? 1 : 0)}</span></div>`; }
+
+// ---------- 狀態 ----------
+const S = { W: null, raw: null, rawName: "示範量體", parts: [], ctx: [], ctxParts: [], rad: null, winds: [], wsel: -1 };
+
+// ---------- EPW ----------
+function parseEPW(text) {
+  const lines = text.split(/\r?\n/);
+  const loc = lines[0].split(",");
+  const n = 8760, W = { ghi: new Float32Array(n), dni: new Float32Array(n), dhi: new Float32Array(n), ws: new Float32Array(n), wd: new Float32Array(n), dbt: new Float32Array(n) };
+  let h = 0;
+  for (let i = 8; i < lines.length && h < n; i++) {
+    const c = lines[i].split(","); if (c.length < 22) continue;
+    const mo = +c[1], dd = +c[2]; if (mo === 2 && dd === 29) continue;
+    W.dbt[h] = +c[6]; W.ghi[h] = +c[13]; W.dni[h] = +c[14]; W.dhi[h] = +c[15];
+    W.wd[h] = +c[20]; W.ws[h] = +c[21];
+    if (W.ws[h] > 90) W.ws[h] = 0; h++;
+  }
+  if (h < 8760) throw new Error(`EPW 資料只有 ${h} 小時，需要 8760`);
+  Object.assign(W, { city: `${loc[1] || ""} ${loc[3] || ""}`.trim(), lat: +loc[6], lon: +loc[7], tz: +loc[8], epw: true });
+  return W;
+}
+function clearSky(lat, lon, tz) { // 簡化晴空模型（ASHRAE 1972 + 常數擴散比），只供相對比較
+  const n = 8760, W = { ghi: new Float32Array(n), dni: new Float32Array(n), dhi: new Float32Array(n), ws: new Float32Array(n), wd: new Float32Array(n), dbt: new Float32Array(n), city: "晴空模型", lat, lon, tz, epw: false };
+  const A = [1202,1187,1164,1130,1106,1092,1093,1107,1136,1166,1190,1204], Bk = [.141,.142,.149,.164,.177,.185,.186,.182,.165,.152,.144,.141], Ck = [.103,.104,.109,.120,.130,.137,.138,.134,.121,.111,.106,.103];
+  for (let h = 0; h < n; h++) { const m = MONTH_OF[h]-1, [alt] = sunposMain(Math.floor(h/24)+1, h%24+0.5, lat, lon, tz);
+    if (alt <= 0) continue; const s = Math.sin(alt), dn = A[m]*Math.exp(-Bk[m]/s); W.dni[h] = dn; W.dhi[h] = Ck[m]*dn; W.ghi[h] = dn*s + Ck[m]*dn; }
+  return W;
+}
+function sunposMain(doy, hour, lat, lon, tz) {
+  const R = Math.PI/180, g = 2*Math.PI/365*(doy-1+(hour-12)/24);
+  const eq = 229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+  const d = 0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+  const ha = ((hour*60+eq+4*lon-60*tz)/4-180)*R, la = lat*R;
+  return [Math.asin(Math.sin(la)*Math.sin(d)+Math.cos(la)*Math.cos(d)*Math.cos(ha))];
+}
+function windRose(W, months) {
+  const rows = SECT.map((s, i) => ({ s, zh: SECT_ZH[i], deg: i*22.5, n: 0, sum: 0, bins: [0,0,0,0,0] }));
+  let tot = 0, calm = 0, all = 0;
+  const edges = [0.5, 2, 4, 6, 8, 1e9];
+  for (let h = 0; h < 8760; h++) { if (!months.includes(MONTH_OF[h])) continue; tot++; all += W.ws[h];
+    if (W.ws[h] < 0.5) { calm++; continue; }
+    const r = rows[Math.floor(((W.wd[h] % 360) + 360) % 360 / 22.5 + 0.5) % 16]; r.n++; r.sum += W.ws[h];
+    for (let b = 0; b < 5; b++) if (W.ws[h] >= edges[b] && W.ws[h] < edges[b+1]) r.bins[b]++; }
+  rows.forEach(r => { r.pct = 100*r.n/tot; r.mean = r.n ? r.sum/r.n : 0; r.bins = r.bins.map(b => 100*b/tot); });
+  return { rows, calm: 100*calm/tot, mean: all/tot };
+}
+function scenarios(W) {
+  const out = [];
+  for (const [name, months] of Object.entries(SEASONS)) {
+    const r = windRose(W, months).rows.slice().sort((a, b) => b.pct - a.pct);
+    r.slice(0, 2).forEach((x, i) => out.push({ name: `${name} ${i ? "次要" : "盛行"}`, ...x }));
+  }
+  return out;
+}
+
+// ---------- 幾何 ----------
+function boxTris(cx, cy, w, d, h, rot) {
+  const r = rot*Math.PI/180, c = Math.cos(r), s = Math.sin(r);
+  const P = [[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]].map(([x, y]) => [cx + x*c - y*s, cy + x*s + y*c]);
+  return prism(P, 0, h);
+}
+function prism(P, z0, z1) { // 逆時針多邊形 → 封閉三角網格（耳切法）
+  const t = [], n = P.length, idx = [...Array(n).keys()];
+  const area2 = (a, b, c) => (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
+  const ears = []; let guard = 0;
+  while (idx.length > 3 && guard++ < 1000) {
+    for (let i = 0; i < idx.length; i++) {
+      const a = P[idx[(i+idx.length-1)%idx.length]], b = P[idx[i]], c = P[idx[(i+1)%idx.length]];
+      if (area2(a, b, c) <= 0) continue;
+      let ok = true; for (const j of idx) { const p = P[j]; if (p === a || p === b || p === c) continue;
+        if (area2(a, b, p) >= 0 && area2(b, c, p) >= 0 && area2(c, a, p) >= 0) { ok = false; break; } }
+      if (ok) { ears.push([a, b, c]); idx.splice(i, 1); break; }
+    }
+  }
+  ears.push(idx.map(i => P[i]));
+  for (const [a, b, c] of ears) { t.push(a[0],a[1],z1, b[0],b[1],z1, c[0],c[1],z1); t.push(a[0],a[1],z0, c[0],c[1],z0, b[0],b[1],z0); }
+  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i+1)%n];
+    t.push(a[0],a[1],z0, b[0],b[1],z0, b[0],b[1],z1); t.push(a[0],a[1],z0, b[0],b[1],z1, a[0],a[1],z1); }
+  return t;
+}
+function demoParts() { // 模型座標（+Y = 圖面朝上）
+  return [
+    prism([[-34,-30],[-10,-30],[-10,14],[6,14],[6,30],[-34,30]], 0, 24),
+    prism([[14,-30],[34,-30],[34,18],[14,18]], 0, 30),
+    prism([[14,22],[34,22],[34,30],[14,30]], 0, 12),
+  ].map(a => new Float32Array(a));
+}
+function placeParts() {
+  const raw = S.raw, sc = +$("unit").value, yup = $("yup").checked, az = +$("upAz").value * Math.PI/180;
+  // 範圍
+  let mn = [1e30,1e30,1e30], mx = [-1e30,-1e30,-1e30];
+  const tf = (x, y, z) => { x *= sc; y *= sc; z *= sc; if (yup) { const t = y; y = -z; z = t; } return [x, y, z]; };
+  for (const p of raw) for (let i = 0; i < p.length; i += 3) { const v = tf(p[i], p[i+1], p[i+2]); for (let a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], v[a]); mx[a] = Math.max(mx[a], v[a]); } }
+  const cx = (mn[0]+mx[0])/2, cy = (mn[1]+mx[1])/2, cz = $("drop").checked ? mn[2] : 0;
+  const c = Math.cos(-az), s = Math.sin(-az);
+  S.parts = raw.map(p => { const o = new Float32Array(p.length);
+    for (let i = 0; i < p.length; i += 3) { const v = tf(p[i], p[i+1], p[i+2]); const x = v[0]-cx, y = v[1]-cy;
+      o[i] = x*c - y*s; o[i+1] = x*s + y*c; o[i+2] = v[2]-cz; } return o; });
+  S.ctxParts = S.ctx.filter(b => b.w > 0 && b.d > 0 && b.h > 0).map(b => new Float32Array(boxTris(b.cx, b.cy, b.w, b.d, b.h, b.rot || 0)));
+  S.rad = null; $("radOut").hidden = true;
+  updateAll();
+}
+function sceneArrays() { // 合併所有三角形，附量體編號；主量體在前
+  const all = [...S.parts, ...S.ctxParts];
+  const T = all.reduce((a, p) => a + p.length/9, 0), tri = new Float32Array(T*9), part = new Int32Array(T);
+  let o = 0; all.forEach((p, i) => { tri.set(p, o*9); part.fill(i, o, o + p.length/9); o += p.length/9; });
+  const nMain = S.parts.reduce((a, p) => a + p.length/9, 0);
+  return { tri, part, nMain };
+}
+function bounds(list) { let mn = [1e30,1e30,1e30], mx = [-1e30,-1e30,-1e30];
+  for (const p of list) for (let i = 0; i < p.length; i += 3) for (let a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], p[i+a]); mx[a] = Math.max(mx[a], p[i+a]); }
+  return { mn, mx }; }
+
+// ---------- 模型載入 ----------
+async function loadModel(file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  const buf = await file.arrayBuffer();
+  if (ext === "ifc") return { parts: await loadIFC(buf), yup: false };
+  let obj;
+  if (ext === "stl") obj = new THREE.Mesh(new THREE.STLLoader().parse(buf));
+  else if (ext === "ply") obj = new THREE.Mesh(new THREE.PLYLoader().parse(buf));
+  else if (ext === "obj") obj = new THREE.OBJLoader().parse(new TextDecoder().decode(buf));
+  else if (ext === "glb") obj = await new Promise((res, rej) => new THREE.GLTFLoader().parse(buf, "", g => res(g.scene), rej));
+  else throw new Error("不支援的格式：" + ext);
+  obj.updateMatrixWorld(true);
+  const parts = [];
+  obj.traverse(o => { if (!o.isMesh) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    const a = g.attributes.position.array; if (a.length >= 9) parts.push(new Float32Array(a)); });
+  if (!parts.length) throw new Error("檔案裡沒有三角面");
+  return { parts, yup: ext === "obj" || ext === "glb" };
+}
+let ifcApi = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("無法載入 " + src)); document.head.appendChild(s); }); }
+async function loadIFC(buf) {
+  if (!ifcApi) {
+    $("mdlLabel").textContent = "載入 IFC 解析器（約 5 MB）…";
+    await loadScript("https://cdn.jsdelivr.net/npm/web-ifc@0.0.66/web-ifc-api-iife.js");
+    ifcApi = new WebIFC.IfcAPI();
+    await ifcApi.Init(() => new URL("web-ifc.wasm", location.href).href, true);
+  }
+  $("mdlLabel").textContent = "解析 IFC 中…";
+  const id = ifcApi.OpenModel(new Uint8Array(buf));
+  const parts = [];
+  ifcApi.StreamAllMeshes(id, (mesh) => {
+    const gs = mesh.geometries;
+    for (let i = 0; i < gs.size(); i++) {
+      const pg = gs.get(i), geo = ifcApi.GetGeometry(id, pg.geometryExpressID);
+      const v = ifcApi.GetVertexArray(geo.GetVertexData(), geo.GetVertexDataSize());
+      const ix = ifcApi.GetIndexArray(geo.GetIndexData(), geo.GetIndexDataSize());
+      const M = pg.flatTransformation, out = new Float32Array(ix.length*3);
+      for (let k = 0; k < ix.length; k++) { const b = ix[k]*6, x = v[b], y = v[b+1], z = v[b+2];
+        const wx = M[0]*x+M[4]*y+M[8]*z+M[12], wy = M[1]*x+M[5]*y+M[9]*z+M[13], wz = M[2]*x+M[6]*y+M[10]*z+M[14];
+        out[k*3] = wx; out[k*3+1] = -wz; out[k*3+2] = wy; } // web-ifc 輸出 Y 朝上 → 轉回 Z 朝上
+      if (out.length >= 9) parts.push(out);
+      geo.delete && geo.delete();
+    }
+  });
+  ifcApi.CloseModel(id);
+  if (!parts.length) throw new Error("IFC 內沒有可轉換的幾何");
+  return parts;
+}
+
+// ---------- 3D 檢視器 ----------
+class Viewer {
+  constructor(el, camsEl) {
+    this.el = el; this.r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    this.r.setPixelRatio(Math.min(2, devicePixelRatio)); el.prepend(this.r.domElement);
+    this.scene = new THREE.Scene(); this.cam = new THREE.PerspectiveCamera(30, 1, 0.5, 20000); this.cam.up.set(0, 0, 1);
+    this.ctl = new THREE.OrbitControls(this.cam, this.r.domElement); this.ctl.addEventListener("change", () => this.draw());
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.85)); const dl = new THREE.DirectionalLight(0xffffff, 0.5); dl.position.set(-1, -2, 3); this.scene.add(dl);
+    this.group = new THREE.Group(); this.scene.add(this.group);
+    new ResizeObserver(() => this.resize()).observe(el);
+    const cams = { "西南鳥瞰": [-1,-1,1.05], "東南鳥瞰": [1,-1,1.05], "東北鳥瞰": [1,1,1.05], "西北鳥瞰": [-1,1,1.05], "正上方": [0,-0.001,1] };
+    this.view = [-1,-1,1.05];
+    if (camsEl) for (const [k, v] of Object.entries(cams)) { const b = document.createElement("button"); b.textContent = k; b.onclick = () => { this.view = v; this.fit(); }; camsEl.appendChild(b); }
+    this.resize();
+  }
+  resize() { const w = this.el.clientWidth, h = this.el.clientHeight; if (!w) return; this.r.setSize(w, h); this.cam.aspect = w/h; this.cam.updateProjectionMatrix(); this.draw(); }
+  set(objs, focus) { this.group.clear(); objs.forEach(o => this.group.add(o)); this.focus = focus; this.r.setClearColor(new THREE.Color(css("--panel") || "#fff")); this.fit(); }
+  fit() { const f = this.focus || { c: [0,0,10], r: 60 }; const v = new THREE.Vector3(...this.view).normalize();
+    const d = f.r / Math.sin(this.cam.fov*Math.PI/360) * 1.05;
+    this.ctl.target.set(...f.c); this.cam.position.set(f.c[0]+v.x*d, f.c[1]+v.y*d, f.c[2]+v.z*d); this.cam.up.set(0,0,1);
+    if (this.view[0] === 0) this.cam.up.set(0,1,0);
+    this.ctl.update(); this.draw(); }
+  draw() { this.r.render(this.scene, this.cam); }
+  png() { this.draw(); return new Promise(r => this.r.domElement.toBlob(r, "image/png")); }
+}
+function meshFrom(list, color, opacity = 1) {
+  const g = new THREE.Group();
+  for (const p of list) { const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(p, 3)); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide })); g.add(m);
+    g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.6 }))); }
+  return g;
+}
+
+// ---------- Worker ----------
+const workerURL = URL.createObjectURL(new Blob([$("workerSrc").textContent], { type: "text/javascript" }));
+function runWorker(msg, prog, onDone, onErr) {
+  const w = new Worker(workerURL);
+  w.onmessage = (e) => { const m = e.data;
+    if (m.type === "progress") { prog.hidden = false; prog.querySelector("i").style.width = (100*m.f).toFixed(1) + "%"; prog.querySelector("span").textContent = m.msg; }
+    else if (m.type === "error") { w.terminate(); onErr(m.msg); }
+    else { w.terminate(); onDone(m.res); } };
+  w.onerror = (e) => { w.terminate(); onErr(e.message || "計算失敗"); };
+  w.postMessage(msg);
+  return w;
+}
+
+// ---------- 下載（透過 Claude 頁面能力；沒有時隱藏按鈕） ----------
+let dl = null;
+const inClaude = !!window.claude?.use;
+async function setupDownloads() {
+  document.querySelectorAll("[data-dl]").forEach(b => b.hidden = inClaude);
+  if (!inClaude) return; // 本機開啟：用瀏覽器一般下載
+  try { dl = await window.claude.use("downloads"); } catch { dl = null; }
+  document.querySelectorAll("[data-dl]").forEach(b => b.hidden = !dl);
+}
+async function save(filename, data) {
+  if (dl) { try { await dl.save({ filename, data }); } catch (e) { if (e?.code !== "declined") console.warn(e); } return; }
+  if (inClaude) return;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data])); a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// ---------- 平面圖（模型與氣象） ----------
+function drawFootprint() {
+  const cv = $("fpCanvas"), W = cv.clientWidth || 600, H = Math.round(Math.min(480, W*0.85));
+  cv.width = W*devicePixelRatio; cv.height = H*devicePixelRatio; cv.style.height = H + "px";
+  const ctx = cv.getContext("2d"); ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, W, H);
+  const all = [...S.parts, ...S.ctxParts], b = bounds(all), pad = 30;
+  const sc = Math.min((W-2*pad)/(b.mx[0]-b.mn[0] || 1), (H-2*pad)/(b.mx[1]-b.mn[1] || 1));
+  const X = x => pad + (x-b.mn[0])*sc + ((W-2*pad) - (b.mx[0]-b.mn[0])*sc)/2, Y = y => H - pad - (y-b.mn[1])*sc - ((H-2*pad) - (b.mx[1]-b.mn[1])*sc)/2;
+  const zmax = b.mx[2] || 1, acc = css("--accent");
+  const draw = (list, col) => { const faces = [];
+    for (const p of list) for (let i = 0; i < p.length; i += 9) { const ux = p[i+3]-p[i], uy = p[i+4]-p[i+1], vx = p[i+6]-p[i], vy = p[i+7]-p[i+1], uz = p[i+5]-p[i+2], vz = p[i+8]-p[i+2];
+      const nz = ux*vy-uy*vx, ln = Math.hypot(uy*vz-uz*vy, uz*vx-ux*vz, nz); if (ln > 0 && nz/ln > 0.9) faces.push([p, i, (p[i+2]+p[i+5]+p[i+8])/3]); }
+    faces.sort((a, b) => a[2]-b[2]);
+    for (const [p, i, z] of faces) { ctx.beginPath(); ctx.moveTo(X(p[i]), Y(p[i+1])); ctx.lineTo(X(p[i+3]), Y(p[i+4])); ctx.lineTo(X(p[i+6]), Y(p[i+7])); ctx.closePath();
+      ctx.globalAlpha = 0.3 + 0.65*Math.min(1, z/zmax); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 0.6; ctx.stroke(); } };
+  draw(S.ctxParts, css("--muted")); draw(S.parts, acc);
+  // 比例尺 + 指北
+  ctx.fillStyle = css("--ink"); ctx.font = "12px " + css("--f-data");
+  const L = Math.pow(10, Math.floor(Math.log10((W-2*pad)/sc/4))); const Lp = L*sc;
+  ctx.fillRect(pad, H-14, Lp, 2); ctx.fillText(`${L} m`, pad + Lp + 6, H-9);
+  ctx.beginPath(); ctx.moveTo(W-24, 12); ctx.lineTo(W-31, 32); ctx.lineTo(W-17, 32); ctx.closePath(); ctx.fill(); ctx.fillText("N", W-28, 46);
+  const pb = bounds(S.parts);
+  $("fpInfo").textContent = `主量體 ${fmt(pb.mx[0]-pb.mn[0])} × ${fmt(pb.mx[1]-pb.mn[1])} m（東西 × 南北範圍），高 ${fmt(pb.mx[2],1)} m；顏色越深越高。`;
+}
+function drawRose() {
+  if (!S.W?.epw) return;
+  const months = SEASONS[$("roseSeason").value], R = windRose(S.W, months);
+  const size = 400, c = size/2, rmax = 160, maxPct = Math.max(...R.rows.map(r => r.pct)) || 1;
+  const ring = Math.ceil(maxPct/10)*10 || 10, k = rmax/ring;
+  const cols = ["#c6dbef","#9ecae1","#6baed6","#3182bd","#08519c"], labs = ["0.5–2","2–4","4–6","6–8",">8"];
+  let s = `<svg viewBox="0 0 ${size} ${size+40}" role="img" aria-label="風花圖"><g font-family="${css("--f-data")}" font-size="11" fill="${css("--muted")}">`;
+  for (let p = 10; p <= ring; p += 10) s += `<circle cx="${c}" cy="${c}" r="${p*k}" fill="none" stroke="${css("--line")}"/><text x="${c+3}" y="${c-p*k-2}">${p}%</text>`;
+  R.rows.forEach((r, i) => { const a = (i*22.5-90)*Math.PI/180, x = c+Math.cos(a)*(rmax+16), y = c+Math.sin(a)*(rmax+16)+4;
+    s += `<text x="${x}" y="${y}" text-anchor="middle" fill="${i%4 ? css("--muted") : css("--ink")}">${r.s}</text>`;
+    let r0 = 0; r.bins.forEach((b, j) => { if (!b) return; const r1 = r0 + b*k, a0 = (i*22.5-90-10)*Math.PI/180, a1 = (i*22.5-90+10)*Math.PI/180;
+      s += `<path d="M${c+Math.cos(a0)*r0},${c+Math.sin(a0)*r0} L${c+Math.cos(a0)*r1},${c+Math.sin(a0)*r1} A${r1},${r1} 0 0 1 ${c+Math.cos(a1)*r1},${c+Math.sin(a1)*r1} L${c+Math.cos(a1)*r0},${c+Math.sin(a1)*r0} ${r0 ? `A${r0},${r0} 0 0 0 ${c+Math.cos(a0)*r0},${c+Math.sin(a0)*r0}` : ""}Z" fill="${cols[j]}"><title>${r.zh} ${labs[j]} m/s：${b.toFixed(1)}%</title></path>`; r0 = r1; }); });
+  labs.forEach((l, j) => s += `<rect x="${20+j*76}" y="${size+14}" width="12" height="12" fill="${cols[j]}"/><text x="${36+j*76}" y="${size+24}">${l} m/s</text>`);
+  s += `</g></svg><div class="hint" style="text-align:center">靜風 ${R.calm.toFixed(1)}%，平均風速 ${R.mean.toFixed(2)} m/s</div>`;
+  $("rose").innerHTML = s;
+}
+function siteTables() {
+  const W = S.W; $("scenCard").hidden = $("monCard").hidden = !W?.epw; if (!W?.epw) return;
+  const sc = scenarios(W);
+  $("scenTable").innerHTML = `<table><tr><th>情境</th><th>風向</th><th>角度</th><th>頻率 %</th><th>平均風速 m/s</th></tr>${sc.map((r, i) => `<tr class="pick" data-i="${i}" tabindex="0"><td class="txt">${r.name}</td><td class="txt">${r.zh}（${r.s}）</td><td>${r.deg}</td><td>${r.pct.toFixed(1)}</td><td>${r.mean.toFixed(2)}</td></tr>`).join("")}</table>`;
+  $("scenTable").querySelectorAll("tr.pick").forEach(tr => { const go = () => { const r = sc[+tr.dataset.i]; $("wd").value = r.deg; $("u10").value = r.mean.toFixed(2); selectTab("wind"); updateEst(); };
+    tr.onclick = go; tr.onkeydown = e => { if (e.key === "Enter") go(); }; });
+  const m = Array.from({ length: 12 }, () => ({ g: 0, dn: 0, df: 0, ws: 0, t: 0, n: 0 }));
+  for (let h = 0; h < 8760; h++) { const r = m[MONTH_OF[h]-1]; r.g += W.ghi[h]/1000; r.dn += W.dni[h]/1000; r.df += W.dhi[h]/1000; r.ws += W.ws[h]; r.t += W.dbt[h]; r.n++; }
+  const row = (lab, fn, d) => `<tr><td class="txt">${lab}</td>${m.map(r => `<td>${fmt(fn(r), d)}</td>`).join("")}</tr>`;
+  $("monTable").innerHTML = `<table><tr><th></th>${m.map((_, i) => `<th>${i+1}月</th>`).join("")}</tr>${row("GHI kWh/m²", r => r.g)}${row("DNI kWh/m²", r => r.dn)}${row("DHI kWh/m²", r => r.df)}${row("平均風速 m/s", r => r.ws/r.n, 1)}${row("平均氣溫 °C", r => r.t/r.n, 1)}</table>
+    <div class="hint">全年 GHI ${fmt(m.reduce((a, r) => a + r.g, 0))}、DNI ${fmt(m.reduce((a, r) => a + r.dn, 0))}、DHI ${fmt(m.reduce((a, r) => a + r.df, 0))} kWh/m²</div>`;
+}
+
+// ---------- 日射 ----------
+const radViewer = new Viewer($("radView"), $("radCams"));
+let radWorker = null;
+function radParams() {
+  const per = $("radPeriod").value;
+  return { months: per === "全年" ? SEASONS["全年"] : SEASONS[per] || [+per], h0: +$("radH0").value, h1: +$("radH1").value,
+    albedo: +$("albedo").value, bgrid: +$("bgrid").value, ggrid: +$("ggrid").value, gmargin: +$("gmargin").value, mf: +$("skymf").value };
+}
+function runRad() {
+  const W = S.W, p = radParams(), { tri, part, nMain } = sceneArrays();
+  $("radRun").disabled = true; $("radStop").hidden = false;
+  radWorker = runWorker({ type: "rad", tri, part, nMain, p, w: { ghi: W.ghi, dni: W.dni, dhi: W.dhi, lat: W.lat, lon: W.lon, tz: W.tz } }, $("radProg"),
+    (res) => { $("radRun").disabled = false; $("radStop").hidden = true; $("radProg").hidden = true; res.p = p; res.full = p.months.length === 12 && p.h0 === 0 && p.h1 === 24; S.rad = res; showRad(true); },
+    (msg) => { $("radRun").disabled = false; $("radStop").hidden = true; $("radProg").hidden = true; $("radNote").hidden = false; $("radNote").textContent = msg; });
+}
+function radSummary(r) {
+  const groups = {}, O = ["北","東北","東","東南","南","西南","西","西北"];
+  for (let t = 0; t < r.bval.length; t++) { const nx = r.bnrm[t*3], ny = r.bnrm[t*3+1], nz = r.bnrm[t*3+2]; let k;
+    if (nz > 0.9) k = "屋頂/水平面"; else if (Math.abs(nz) < 0.3) { const az = (Math.atan2(nx, ny)*180/Math.PI + 360) % 360; k = O[Math.floor(az/45+0.5)%8] + "向立面"; } else k = "其他斜面";
+    const g = groups[k] ||= { a: 0, s: 0, mn: 1e9, mx: -1e9 }; g.a += r.barea[t]; g.s += r.bval[t]*r.barea[t]; g.mn = Math.min(g.mn, r.bval[t]); g.mx = Math.max(g.mx, r.bval[t]); }
+  const order = ["屋頂/水平面", ...O.map(o => o + "向立面"), "其他斜面"];
+  const rows = order.filter(k => groups[k]).map(k => ({ k, a: groups[k].a, avg: groups[k].s/groups[k].a, mn: groups[k].mn, mx: groups[k].mx }));
+  const gv = Array.from(r.gval).filter(Number.isFinite);
+  if (gv.length) rows.push({ k: "地面", a: NaN, avg: gv.reduce((a, b) => a + b, 0)/gv.length, mn: Math.min(...gv), mx: Math.max(...gv) });
+  return rows;
+}
+function showRad(refit) {
+  const r = S.rad; if (!r) return;
+  $("radOut").hidden = false; $("radNote").hidden = S.W.epw; if (!S.W.epw) $("radNote").textContent = "目前用晴空模型，絕對值偏高，只能比較相對分布。上傳 EPW 可得到實際數值。";
+  if (refit) { const roof = []; for (let t = 0; t < r.bval.length; t++) if (r.bnrm[t*3+2] > 0.9) roof.push(r.bval[t]);
+    roof.sort((a, b) => a - b); const p98 = roof.length ? roof[Math.floor(roof.length*0.98)] : Math.max(...r.bval);
+    $("radVmax").value = (S.W.epw && r.full) ? 1500 : Math.ceil(p98/50)*50; }
+  const vmax = +$("radVmax").value || 1;
+  // 外殼網格：逐面上色
+  const NB = r.bval.length, col = new Float32Array(NB*9);
+  for (let t = 0; t < NB; t++) { const c = radColor(r.bval[t]/vmax); for (let v = 0; v < 3; v++) { col[t*9+v*3] = c[0]/255; col[t*9+v*3+1] = c[1]/255; col[t*9+v*3+2] = c[2]/255; } }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(r.at, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const bm = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  bm.userData.vals = r.bval;
+  const objs = [bm];
+  for (const p of S.parts) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(p, 3)); objs.push(new THREE.LineSegments(new THREE.EdgesGeometry(g, 30), new THREE.LineBasicMaterial({ color: 0x222222 }))); }
+  if (r.gx.length) {
+    const nx = r.gx.length, ny = r.gy.length, cv = document.createElement("canvas"); cv.width = nx; cv.height = ny;
+    const ctx = cv.getContext("2d"), img = ctx.createImageData(nx, ny);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const v = r.gval[j*nx+i], o = ((ny-1-j)*nx+i)*4;
+      if (Number.isFinite(v)) { const c = radColor(v/vmax); img.data[o] = c[0]; img.data[o+1] = c[1]; img.data[o+2] = c[2]; img.data[o+3] = 255; } }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+    const g = r.gx.length > 1 ? r.gx[1]-r.gx[0] : 1, w = nx*g, h = ny*g;
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+    pl.position.set(r.gx[0]-g/2+w/2, r.gy[0]-g/2+h/2, -0.02); objs.push(pl);
+  }
+  if (S.ctxParts.length) objs.push(meshFrom(S.ctxParts, 0xbbbbbb, 0.55));
+  const b = bounds(S.parts), R = Math.hypot(b.mx[0]-b.mn[0], b.mx[1]-b.mn[1], b.mx[2]) * 0.5 + 10;
+  radViewer.set(objs, { c: [(b.mn[0]+b.mx[0])/2, (b.mn[1]+b.mx[1])/2, b.mx[2]/3], r: R });
+  radViewer.pick = bm;
+  legend($("radLegend"), radColor, vmax, `日射量 kWh/m²（${S.W.epw ? "EPW" : "晴空模型"}）`);
+  const rows = radSummary(r), roof = rows.find(x => x.k === "屋頂/水平面");
+  $("radStats").innerHTML = [["水平面 GHI", fmt(r.ghi), "kWh/m²，期間累積"], ["屋頂平均", roof ? fmt(roof.avg) : "—", "kWh/m²"], ["日照時數", fmt(r.sunH), "小時"], ["分析面數", fmt(r.bval.length), `計算 ${r.seconds.toFixed(1)} 秒`]]
+    .map(([a, b, c]) => `<div class="stat"><span>${a}</span><b>${b}</b><span>${c}</span></div>`).join("");
+  $("radTable").innerHTML = `<table><tr><th>類別</th><th>面積 m²</th><th>平均</th><th>最小</th><th>最大</th></tr>${rows.map(x => `<tr><td class="txt">${x.k}</td><td>${fmt(x.a)}</td><td>${fmt(x.avg)}</td><td>${fmt(x.mn)}</td><td>${fmt(x.mx)}</td></tr>`).join("")}</table>`;
+  S.radRows = rows;
+}
+// 3D 滑鼠讀值
+function hoverPick(viewer, tipText) {
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; viewer.el.appendChild(tip);
+  const ray = new THREE.Raycaster(); let pend = false;
+  viewer.r.domElement.addEventListener("pointermove", (e) => { if (pend || !viewer.pick) return; pend = true; requestAnimationFrame(() => { pend = false;
+    const rc = viewer.r.domElement.getBoundingClientRect(), m = new THREE.Vector2(((e.clientX-rc.left)/rc.width)*2-1, -((e.clientY-rc.top)/rc.height)*2+1);
+    ray.setFromCamera(m, viewer.cam); const hit = ray.intersectObject(viewer.pick)[0];
+    const txt = hit ? tipText(hit) : null; tip.hidden = !txt; if (txt) { tip.textContent = txt; tip.style.left = (e.clientX-rc.left+12) + "px"; tip.style.top = (e.clientY-rc.top+12) + "px"; } }); });
+  viewer.r.domElement.addEventListener("pointerleave", () => tip.hidden = true);
+}
+hoverPick(radViewer, (h) => `${fmt(h.object.userData.vals[h.faceIndex])} kWh/m²`);
+
+// ---------- 風場 ----------
+const windViewer = new Viewer($("windView"), $("windCams"));
+let windWorker = null;
+function windParams() { return { wd: +$("wd").value, u10: +$("u10").value, alpha: +$("alpha").value, dx: +$("dx").value, ground: $("ground").value,
+  ups: +$("ups").value, dns: +$("dns").value, lat: +$("lats").value, hgt: +$("hgt").value, steps: +$("steps").value, cs: +$("cs").value, ulat: +$("ulat").value, avgf: 0.33 }; }
+function windDomain(p) {
+  const th = (p.wd + 180)*Math.PI/180, ex = [Math.sin(th), Math.cos(th)], ey = [-ex[1], ex[0]];
+  let s0 = 1e30, s1 = -1e30, t0 = 1e30, t1 = -1e30;
+  for (const q of [...S.parts, ...S.ctxParts]) for (let i = 0; i < q.length; i += 3) { const s = q[i]*ex[0]+q[i+1]*ex[1], t = q[i]*ey[0]+q[i+1]*ey[1];
+    s0 = Math.min(s0, s); s1 = Math.max(s1, s); t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
+  const NX = Math.ceil((s1-s0+p.ups+p.dns)/p.dx), NY = Math.ceil((t1-t0+2*p.lat)/p.dx), NZ = Math.ceil(p.hgt/p.dx)+1;
+  const xs = Float64Array.from({ length: NX }, (_, i) => s0 - p.ups + (i+0.5)*p.dx), ys = Float64Array.from({ length: NY }, (_, j) => t0 - p.lat + (j+0.5)*p.dx), zs = Float64Array.from({ length: NZ }, (_, k) => (k-0.5)*p.dx);
+  return { NX, NY, NZ, ex, ey, xs, ys, zs };
+}
+let speedRef = 4e6; // 格·步/秒，執行後依實測更新
+function updateEst() {
+  if (!S.parts.length) return;
+  const p = windParams(), d = windDomain(p), N = d.NX*d.NY*d.NZ, st = p.steps || Math.max(1200, Math.round(1.5*d.NX/p.ulat));
+  const sec = N*st/speedRef, mem = N*19*4*2/1e6 + N*16/1e6;
+  $("windEst").innerHTML = `網格 ${d.NX}×${d.NY}×${d.NZ} = <b>${fmt(N)}</b> 格，${fmt(st)} 步，記憶體約 ${fmt(mem)} MB，預估 <b>${sec < 90 ? fmt(sec) + " 秒" : fmt(sec/60, 1) + " 分鐘"}</b>（依瀏覽器與電腦而定）`;
+  $("windRun").disabled = mem > 3500;
+  if (mem > 3500) $("windEst").innerHTML += `<br><span class="err">格數太多，瀏覽器記憶體不夠。請加大 dx 或縮小計算域。</span>`;
+}
+function defaultsDomain() { const H = bounds([...S.parts, ...S.ctxParts]).mx[2];
+  $("ups").value = Math.max(60, Math.round(4*H/10)*10); $("dns").value = Math.max(100, Math.round(8*H/10)*10); $("lats").value = Math.max(60, Math.round(3*H/10)*10); $("hgt").value = Math.round(Math.max(3*H, H+30)); }
+function runWind() {
+  const p = windParams(), d = windDomain(p), { tri, part } = sceneArrays();
+  $("windRun").disabled = true; $("windStop").hidden = false; $("windErr").hidden = true;
+  const t0 = performance.now();
+  windWorker = runWorker({ type: "wind", tri, part, d, p }, $("windProg"),
+    (res) => { $("windRun").disabled = false; $("windStop").hidden = true; $("windProg").hidden = true;
+      speedRef = d.NX*d.NY*d.NZ*res.steps/Math.max(1, res.seconds);
+      S.winds.push({ p, d, res, label: `${p.wd}° 來風 ${p.u10} m/s｜${p.ground === "free" ? "free-slip" : "no-slip"}｜dx ${p.dx} m${S.ctxParts.length ? `｜周邊 ${S.ctxParts.length}` : ""}` });
+      S.wsel = S.winds.length-1; fillWindSel(); showWind(true); updateEst(); },
+    (msg) => { $("windRun").disabled = false; $("windStop").hidden = true; $("windProg").hidden = true; $("windErr").hidden = false; $("windErr").textContent = msg; });
+}
+function fillWindSel() { $("windSel").innerHTML = S.winds.map((w, i) => `<option value="${i}" ${i === S.wsel ? "selected" : ""}>${i+1}. ${w.label}</option>`).join(""); }
+function sliceLayer(w, k) { // 回傳流向座標的 NX×NY 風速與向量
+  const { NX, NY, NZ } = w.d, u = w.res.u, sol = w.res.solid, sp = new Float32Array(NX*NY), vx = new Float32Array(NX*NY), vy = new Float32Array(NX*NY), so = new Uint8Array(NX*NY);
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) { const n = (i*NY+j)*NZ+k, o = j*NX+i; so[o] = sol[n]; vx[o] = u[n*3]; vy[o] = u[n*3+1]; sp[o] = sol[n] ? NaN : Math.hypot(u[n*3], u[n*3+1]); }
+  return { sp, vx, vy, so };
+}
+const refSpeed = (w, z) => w.p.u10 * Math.pow(Math.max(z, 0.5)/10, w.p.alpha);
+function layerImage(w, L, vmax, ratio, ref) {
+  const { NX, NY } = w.d, cv = document.createElement("canvas"); cv.width = NX; cv.height = NY;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(NX, NY);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const v = L.sp[j*NX+i], o = (j*NX+i)*4;
+    if (Number.isFinite(v)) { const c = turbo((ratio ? v/ref : v)/vmax); img.data[o] = c[0]; img.data[o+1] = c[1]; img.data[o+2] = c[2]; img.data[o+3] = 255; } }
+  ctx.putImageData(img, 0, 0); return cv;
+}
+function showWind(newRun) {
+  const w = S.winds[S.wsel]; if (!w) return; $("windOut").hidden = false;
+  const { d } = w; $("zk").max = d.NZ-2; if (newRun) $("zk").value = 1;
+  const k = +$("zk").value, z = d.zs[k], ratio = $("wmode").value === "ratio", ref = refSpeed(w, z);
+  $("zTxt").textContent = `${z.toFixed(1)} m`;
+  const L = sliceLayer(w, k);
+  const fin = Array.from(L.sp).filter(Number.isFinite);
+  const mx = Math.max(...fin);
+  if (newRun || $("wvmax").dataset.mode !== $("wmode").value) { const srt = fin.slice().sort((a, b) => a - b), p99 = srt[Math.floor(srt.length*0.995)] || 1;
+    $("wvmax").value = ratio ? 1.6 : (Math.ceil(p99*2)/2).toFixed(1); $("wvmax").dataset.mode = $("wmode").value; }
+  const vmax = +$("wvmax").value || 1;
+  $("windStats").innerHTML = [["切面高度", z.toFixed(1), "m"], ["同高度自由流", ref.toFixed(2), "m/s"], ["最大風速", mx.toFixed(2), `m/s，${(mx/ref).toFixed(2)}× 自由流`],
+    ["> 1.3× 自由流", (100*fin.filter(v => v > 1.3*ref).length/fin.length).toFixed(1), "% 面積"], ["< 0.3 m/s", (100*fin.filter(v => v < 0.3).length/fin.length).toFixed(1), "% 面積"]]
+    .map(([a, b, c]) => `<div class="stat"><span>${a}</span><b>${b}</b><span>${c}</span></div>`).join("");
+  $("windTitle").textContent = `${w.p.wd}° 來風，U10 ${w.p.u10} m/s，z = ${z.toFixed(1)} m（${w.p.ground === "free" ? "free-slip" : "no-slip"}，dx ${w.p.dx} m，${w.res.steps} 步，${(w.res.seconds/60).toFixed(1)} 分鐘）`;
+  const img = layerImage(w, L, vmax, ratio, ref);
+  drawWindPlan(w, L, img, vmax, ratio, ref);
+  // 3D
+  const { NX, NY, ex, ey, xs, ys, dx } = { ...d, dx: w.p.dx };
+  const tex = new THREE.CanvasTexture(img); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.LinearFilter; tex.flipY = false;
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(NX*dx, NY*dx), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+  // PlaneGeometry 的 uv：u 沿 +x、v 沿 +y（flipY=false 時第 0 列在 v=0）
+  const cxs = (xs[0]+xs[NX-1])/2, cys = (ys[0]+ys[NY-1])/2;
+  pl.rotation.z = Math.atan2(ex[1], ex[0]);
+  pl.position.set(cxs*ex[0]+cys*ey[0], cxs*ex[1]+cys*ey[1], z);
+  const objs = [pl, meshFrom(S.parts, 0xeeeeee)]; if (S.ctxParts.length) objs.push(meshFrom(S.ctxParts, 0xbbbbbb));
+  const b = bounds([...S.parts, ...S.ctxParts]), R = Math.hypot(b.mx[0]-b.mn[0], b.mx[1]-b.mn[1]) * 0.9 + 30;
+  windViewer.set(objs, { c: [(b.mn[0]+b.mx[0])/2, (b.mn[1]+b.mx[1])/2, 0], r: R });
+  legend($("windLegend"), turbo, vmax, ratio ? "風速比" : "風速 m/s");
+}
+function drawWindPlan(w, L, img, vmax, ratio, ref) {
+  const { NX, NY, ex, ey, xs, ys } = w.d, dx = w.p.dx;
+  const cv = $("windCanvas"), W = cv.clientWidth || 800;
+  // 世界座標範圍（四角）
+  const cs = [[xs[0]-dx/2, ys[0]-dx/2], [xs[NX-1]+dx/2, ys[0]-dx/2], [xs[0]-dx/2, ys[NY-1]+dx/2], [xs[NX-1]+dx/2, ys[NY-1]+dx/2]].map(([s, t]) => [s*ex[0]+t*ey[0], s*ex[1]+t*ey[1]]);
+  const x0 = Math.min(...cs.map(c => c[0])), x1 = Math.max(...cs.map(c => c[0])), y0 = Math.min(...cs.map(c => c[1])), y1 = Math.max(...cs.map(c => c[1]));
+  const H = Math.round(Math.min(760, W*(y1-y0)/(x1-x0)));
+  cv.width = W*devicePixelRatio; cv.height = H*devicePixelRatio; cv.style.height = H + "px";
+  const sc = Math.min(W/(x1-x0), H/(y1-y0)), ox = (W-(x1-x0)*sc)/2, oy = (H-(y1-y0)*sc)/2;
+  const ctx = cv.getContext("2d"); ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, W, H);
+  // 世界 → 螢幕：X = ox + (x-x0)*sc, Y = H - oy - (y-y0)*sc；流向格 (i,j) → 世界 s,t
+  const toScr = (x, y) => [ox + (x-x0)*sc, H - oy - (y-y0)*sc];
+  ctx.save();
+  const [px, py] = toScr(0, 0);
+  // 流向座標 (s,t) → 螢幕：s 軸方向 (ex)，t 軸方向 (ey)
+  ctx.setTransform(devicePixelRatio*ex[0]*sc, -devicePixelRatio*ex[1]*sc, devicePixelRatio*ey[0]*sc, -devicePixelRatio*ey[1]*sc, devicePixelRatio*px, devicePixelRatio*py);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, xs[0]-dx/2, ys[0]-dx/2, NX*dx, NY*dx);
+  // 建物輪廓
+  ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.6/sc; ctx.beginPath();
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) { if (!L.so[j*NX+i]) continue; const s = xs[i]-dx/2, t = ys[j]-dx/2;
+    if (i > 0 && !L.so[j*NX+i-1]) { ctx.moveTo(s, t); ctx.lineTo(s, t+dx); } if (i < NX-1 && !L.so[j*NX+i+1]) { ctx.moveTo(s+dx, t); ctx.lineTo(s+dx, t+dx); }
+    if (j > 0 && !L.so[(j-1)*NX+i]) { ctx.moveTo(s, t); ctx.lineTo(s+dx, t); } if (j < NY-1 && !L.so[(j+1)*NX+i]) { ctx.moveTo(s, t+dx); ctx.lineTo(s+dx, t+dx); } }
+  ctx.stroke();
+  // 箭頭
+  const every = Math.max(2, Math.round(10/dx * Math.max(1, (x1-x0)/400)));
+  let umax = 0; for (let o = 0; o < L.sp.length; o++) if (L.sp[o] > umax) umax = L.sp[o];
+  ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1/sc; ctx.beginPath();
+  const Ls = every*dx*0.85/(umax || 1);
+  for (let i = every/2|0; i < NX; i += every) for (let j = every/2|0; j < NY; j += every) { const o = j*NX+i; if (L.so[o] || !Number.isFinite(L.sp[o])) continue;
+    const s = xs[i], t = ys[j], a = L.vx[o]*Ls, b = L.vy[o]*Ls, s1 = s+a, t1 = t+b, an = Math.atan2(b, a), hl = 0.3*Math.hypot(a, b);
+    ctx.moveTo(s, t); ctx.lineTo(s1, t1); ctx.lineTo(s1-hl*Math.cos(an-0.45), t1-hl*Math.sin(an-0.45)); ctx.moveTo(s1, t1); ctx.lineTo(s1-hl*Math.cos(an+0.45), t1-hl*Math.sin(an+0.45)); }
+  ctx.stroke(); ctx.restore();
+  // 指北 + 比例尺 + 色階
+  ctx.fillStyle = css("--ink"); ctx.font = "12px " + css("--f-data");
+  ctx.beginPath(); ctx.moveTo(W-24, 12); ctx.lineTo(W-31, 32); ctx.lineTo(W-17, 32); ctx.closePath(); ctx.fill(); ctx.fillText("N", W-28, 46);
+  const Lm = Math.pow(10, Math.floor(Math.log10(W/sc/4))); ctx.fillRect(14, H-16, Lm*sc, 2); ctx.fillText(`${Lm} m`, 20 + Lm*sc, H-11);
+  const gw = Math.min(220, W*0.4), gx0 = W - gw - 14, gy0 = H - 30; for (let i = 0; i < gw; i++) { const c = turbo(i/gw); ctx.fillStyle = `rgb(${c.map(Math.round)})`; ctx.fillRect(gx0+i, gy0, 1, 10); }
+  ctx.fillStyle = css("--ink"); ctx.fillText("0", gx0, gy0+24); ctx.textAlign = "right"; ctx.fillText(`${vmax} ${ratio ? "（風速比）" : "m/s"}`, gx0+gw, gy0+24); ctx.textAlign = "left";
+  // 讀值
+  cv.onmousemove = (e) => { const rc = cv.getBoundingClientRect(), X = e.clientX-rc.left, Y = e.clientY-rc.top;
+    const x = x0 + (X-ox)/sc, y = y0 + (H-oy-Y)/sc, s = x*ex[0]+y*ex[1], t = x*ey[0]+y*ey[1];
+    const i = Math.floor((s - xs[0] + dx/2)/dx), j = Math.floor((t - ys[0] + dx/2)/dx), tip = $("windTip");
+    if (i < 0 || j < 0 || i >= NX || j >= NY) { tip.hidden = true; return; }
+    const v = L.sp[j*NX+i]; tip.hidden = false; tip.style.left = (X+12) + "px"; tip.style.top = (Y+12) + "px";
+    tip.textContent = Number.isFinite(v) ? `${v.toFixed(2)} m/s（${(v/ref).toFixed(2)}×）` : "建物"; };
+  cv.onmouseleave = () => $("windTip").hidden = true;
+  S.windCsv = () => { const rows = ["x_east_m,y_north_m,speed_mps,ratio"]; for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const v = L.sp[j*NX+i]; if (!Number.isFinite(v)) continue;
+    const x = xs[i]*ex[0]+ys[j]*ey[0], y = xs[i]*ex[1]+ys[j]*ey[1]; rows.push(`${x.toFixed(1)},${y.toFixed(1)},${v.toFixed(3)},${(v/ref).toFixed(3)}`); } return rows.join("\n"); };
+}
+
+// ---------- UI 綁定 ----------
+function selectTab(name) { document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name));
+  ["site","rad","wind","doc"].forEach(n => $("tab-" + n).hidden = n !== name);
+  try { localStorage.setItem("cs-tab", name); } catch {}
+  requestAnimationFrame(() => { radViewer.resize(); windViewer.resize(); if (name === "site") drawFootprint(); if (name === "wind" && S.winds.length) showWind(false); }); }
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => selectTab(t.dataset.tab));
+function updateMeta() {
+  const W = S.W, b = bounds(S.parts);
+  $("meta").textContent = `氣象：${W.city}（${W.epw ? "EPW" : "晴空模型"}，${W.lat.toFixed(3)}, ${W.lon.toFixed(3)}）｜模型：${S.rawName}，${fmt(S.parts.reduce((a, p) => a + p.length/9, 0))} 面，高 ${fmt(b.mx[2], 1)} m｜周邊量體 ${S.ctxParts.length} 個`;
+}
+function updateAll() { updateMeta(); drawFootprint(); defaultsDomain(); updateEst(); }
+function setWeather(W) {
+  S.W = W; $("noEpw").hidden = W.epw; $("epwHint").hidden = W.epw;
+  $("rose").innerHTML = W.epw ? "" : `<div class="hint">上傳 EPW 後顯示風花、盛行風向與逐月統計。</div>`;
+  drawRose(); siteTables(); updateMeta();
+  if (W.epw) { const s = scenarios(W)[0]; $("wd").value = s.deg; $("u10").value = s.mean.toFixed(2); updateEst(); }
+}
+function dropzone(drop, input, handler) {
+  input.onchange = () => input.files[0] && handler(input.files[0]);
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && handler(e.dataTransfer.files[0]); });
+}
+dropzone($("epwDrop"), $("epwFile"), async (f) => {
+  try { const W = parseEPW(await f.text()); $("epwLabel").innerHTML = `<strong>${f.name}</strong><br>${W.city}`; setWeather(W); S.rad = null; $("radOut").hidden = true; }
+  catch (e) { $("epwLabel").innerHTML = `<span class="err">讀取失敗：${e.message}</span>`; } });
+dropzone($("mdlDrop"), $("mdlFile"), async (f) => {
+  $("mdlErr").hidden = true; $("mdlLabel").textContent = "讀取中…";
+  try { const m = await loadModel(f); S.raw = m.parts; S.rawName = f.name; $("yup").checked = m.yup;
+    $("mdlLabel").innerHTML = `<strong>${f.name}</strong><br>${m.parts.length} 個物件`; placeParts(); }
+  catch (e) { $("mdlErr").hidden = false; $("mdlErr").textContent = "讀取失敗：" + e.message; $("mdlLabel").innerHTML = `拖曳或點選 <strong>IFC / OBJ / STL / GLB / PLY</strong>`; } });
+["upAz","unit","yup","drop"].forEach(id => $(id).addEventListener("change", placeParts));
+["lat","lon","tz"].forEach(id => $(id).addEventListener("change", () => { if (!S.W.epw) setWeather(clearSky(+$("lat").value, +$("lon").value, +$("tz").value)); }));
+// 周邊量體
+function ctxRow(b = { cx: 80, cy: 0, w: 30, d: 30, h: 20, rot: 0 }) {
+  const r = document.createElement("div"); r.className = "ctx-row";
+  r.innerHTML = ["cx","cy","w","d","h","rot"].map(k => `<input type="number" data-k="${k}" value="${b[k]}" aria-label="${k}">`).join("") + `<button aria-label="刪除">×</button>`;
+  r.querySelector("button").onclick = () => r.remove(); $("ctxRows").appendChild(r);
+}
+$("ctxAdd").onclick = () => ctxRow();
+$("ctxApply").onclick = () => { S.ctx = [...$("ctxRows").children].map(r => Object.fromEntries([...r.querySelectorAll("input")].map(i => [i.dataset.k, +i.value]))); placeParts(); };
+// 日射控制
+const periods = ["全年", ...Object.keys(SEASONS).slice(1), ...Array.from({ length: 12 }, (_, i) => String(i+1))];
+$("radPeriod").innerHTML = periods.map(p => `<option value="${p}">${/^\d+$/.test(p) ? p + " 月" : p}</option>`).join("");
+$("roseSeason").innerHTML = Object.keys(SEASONS).map(p => `<option>${p}</option>`).join(""); $("roseSeason").onchange = drawRose;
+[["albedo","albTxt",2],["bgrid","bgTxt",2],["ggrid","ggTxt",2],["gmargin","gmTxt",0],["cs","csTxt",2],["ulat","ulTxt",3]].forEach(([a, b, d]) => $(a).addEventListener("input", () => $(b).textContent = (+$(a).value).toFixed(d)));
+["radH0","radH1"].forEach(id => $(id).addEventListener("input", () => $("radHrsTxt").textContent = `${$("radH0").value}–${$("radH1").value} 時`));
+$("radRun").onclick = runRad;
+$("radStop").onclick = () => { radWorker?.terminate(); $("radRun").disabled = false; $("radStop").hidden = true; $("radProg").hidden = true; };
+$("radVmax").addEventListener("change", () => showRad(false));
+$("radPng").onclick = async () => save("radiation_3d.png", await radViewer.png());
+$("radCsv").onclick = () => S.radRows && save("radiation_summary.csv", "﻿類別,面積m2,平均kWh/m2,最小,最大\n" + S.radRows.map(r => [r.k, r.a, r.avg, r.mn, r.mx].map(v => typeof v === "number" ? (isFinite(v) ? v.toFixed(0) : "") : v).join(",")).join("\n"));
+// 風場控制
+["wd","u10","alpha","dx","ground","ups","dns","lats","hgt","steps","cs","ulat"].forEach(id => $(id).addEventListener("input", updateEst));
+$("windRun").onclick = runWind;
+$("windStop").onclick = () => { windWorker?.terminate(); $("windRun").disabled = false; $("windStop").hidden = true; $("windProg").hidden = true; };
+$("windSel").onchange = () => { S.wsel = +$("windSel").value; showWind(true); };
+$("zk").addEventListener("input", () => showWind(false));
+$("wmode").onchange = () => showWind(false); $("wvmax").addEventListener("change", () => showWind(false));
+$("windPng").onclick = () => $("windCanvas").toBlob(b => save(`wind_${S.winds[S.wsel].p.wd}_plan.png`, b), "image/png");
+$("wind3dPng").onclick = async () => save(`wind_${S.winds[S.wsel].p.wd}_3d.png`, await windViewer.png());
+$("windCsv").onclick = () => S.windCsv && save(`wind_${S.winds[S.wsel].p.wd}_slice.csv`, S.windCsv());
+addEventListener("resize", () => { drawFootprint(); if (S.winds.length && !$("tab-wind").hidden) showWind(false); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawFootprint(); drawRose(); if (S.rad) showRad(false); });
+
+// ---------- 啟動：示範量體＋晴空模型，先跑一次快速日射 ----------
+S.raw = demoParts();
+setWeather(clearSky(25.035, 121.507, 8));
+placeParts();
+setupDownloads();
+let startTab = "site"; try { startTab = localStorage.getItem("cs-tab") || "site"; } catch {}
+selectTab(startTab);
+$("bgrid").value = 2; $("bgTxt").textContent = "2.00";
+runRad();
+</script>
